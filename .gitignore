@@ -1,0 +1,15 @@
+node_modules/
+.build/
+dist/
+.vercel/
+.env*
+.DS_Store
+private_data/
+*.log
+
+# Private meter data and original Excel reports must never be committed
+**/private_data/
+**/*PRIVATE_IMPORT*.json
+**/*PRIVATE_DATA*
+*.xlsx
+*.xls

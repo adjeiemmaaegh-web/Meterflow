@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "MeterFlow · Water Forecasts",
+  "short_name": "MeterFlow",
+  "description": "Private daily water meter predictions and corrections for apartments",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#153f47",
+  "background_color": "#f7f9f8",
+  "icons": [
+    {"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}

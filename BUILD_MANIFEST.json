@@ -1,0 +1,153 @@
+{
+  "name": "MeterFlow v1.1 React19 source",
+  "generated": "2026-11-15",
+  "status": "React19 production build unverified (npm registry unavailable)",
+  "privateDatasetIncluded": false,
+  "files": [
+    {
+      "path": ".gitignore",
+      "sha256": "f5c336a92243d7d4b977ec46742e48bdcc603c89f9646675c3cd946caf1ebeda",
+      "bytes": 73
+    },
+    {
+      "path": ".vercelignore",
+      "sha256": "adcf20d46ffefd4213d4928b548636436abd34dc30029a8c69714c908d45f349",
+      "bytes": 297
+    },
+    {
+      "path": "LICENSES.txt",
+      "sha256": "28c82dbdd52c00f6e268fb6ae8f4665de6b01c5b5c16cf1f060ae0754e2bd439",
+      "bytes": 2144
+    },
+    {
+      "path": "README.md",
+      "sha256": "6c8e91b2f7a83370d60e32e79d6d4876316fb44a2b5fadefdd43dae049158d2c",
+      "bytes": 6180
+    },
+    {
+      "path": "docs/PHONE_ACCEPTANCE_CHECKLIST.md",
+      "sha256": "76f209f14dd1bb1f33c103f24f38bfca36ab06e1a577b22f8ad180eb98489455",
+      "bytes": 2270
+    },
+    {
+      "path": "docs/QA_REPORT.md",
+      "sha256": "2f6f237bd5d572642bc16f68a0ef94a5e0758d58e8c6f9a04bcfc82d583e1073",
+      "bytes": 3438
+    },
+    {
+      "path": "package.json",
+      "sha256": "2eb7d6a2650d218bc2bd7b03c91bf6c2fbc05b8b4513ad1fd39c77dbdf8eb078",
+      "bytes": 812
+    },
+    {
+      "path": "public/icon-192.png",
+      "sha256": "21a4f587140c46fbaf4e15665ab7cf5a810f0cad3e6785a95e1f1633b9ce6605",
+      "bytes": 1718
+    },
+    {
+      "path": "public/icon-512.png",
+      "sha256": "53cee6234392a066c8fb46787755a20bb23db5a5768f11f28c475147260ce6bf",
+      "bytes": 5143
+    },
+    {
+      "path": "public/manifest.webmanifest",
+      "sha256": "7190f53a07751214f63d7c41410a5b873048ec682b93075ddc836ea8a0d1c7bf",
+      "bytes": 536
+    },
+    {
+      "path": "public/vendor/react-dom.production.min.js",
+      "sha256": "c7a65157caebd9af7e108f1f1eb8b6e2c8fafb141d0f4c2a4d4dfd851c52ec9e",
+      "bytes": 102890
+    },
+    {
+      "path": "public/vendor/react.production.min.js",
+      "sha256": "de59b0d4504aa0350c13775fec9b78859f3eda83dea21d60dded98bb7866d54a",
+      "bytes": 6588
+    },
+    {
+      "path": "scripts/build.mjs",
+      "sha256": "4431ccf9d26fed52d634f33655812838c20afa5e0353d25cf7f459cf98538876",
+      "bytes": 3666
+    },
+    {
+      "path": "scripts/serve.mjs",
+      "sha256": "ec326483816be0672c6cb8698a51b297f226c12213cb415974c6055ae7ed9550",
+      "bytes": 964
+    },
+    {
+      "path": "src/app.tsx",
+      "sha256": "38553133abedb758bc478bbe4f96a69385811c2a89a299f9261ca921f3da0425",
+      "bytes": 40189
+    },
+    {
+      "path": "src/engine.ts",
+      "sha256": "06234f6e035a403fcc25494b246f84025c4f331af2981860c708eeee326fdea2",
+      "bytes": 8678
+    },
+    {
+      "path": "src/index.html",
+      "sha256": "eb80cadd6c376e4826d8f64e29f04fe954b27454f48d2b87cf0a6d02a18ffb84",
+      "bytes": 1269
+    },
+    {
+      "path": "src/react19-bridge.mjs",
+      "sha256": "2fb5b8516bca5c962db933bee5a0e17955b9aafa704c88a41cb961552eed9c60",
+      "bytes": 510
+    },
+    {
+      "path": "src/storage.ts",
+      "sha256": "d5ff142cda395dea15753715a610872f33084e8a43e354ce8e725a01e0eb2044",
+      "bytes": 12797
+    },
+    {
+      "path": "src/style.css",
+      "sha256": "6c82921df5fa9ad894f55197f73941582f0a59a39864a726edf85006bb151e53",
+      "bytes": 26964
+    },
+    {
+      "path": "src/types.ts",
+      "sha256": "7b6fd4cb37a8d99b83984eabcf5ba97a30cd6916d26e7a75c6e6110702ee5e72",
+      "bytes": 2505
+    },
+    {
+      "path": "tests/engine.test.cjs",
+      "sha256": "e2a883a440431c610e4698773ab6624fc04527d8dbd31bbe2df285aa310af6c2",
+      "bytes": 2910
+    },
+    {
+      "path": "tests/fixture.cjs",
+      "sha256": "4583d5afcd0a37c47605b98a0806b5869df13b3280a0e24be9ca3776cb96d0c5",
+      "bytes": 741
+    },
+    {
+      "path": "tests/report.integration.cjs",
+      "sha256": "e75bfe0e4a668e3a8c1858cbba4afdb041b4e811a538bf0ac41af0641a0d421c",
+      "bytes": 3879
+    },
+    {
+      "path": "tests/revision.test.cjs",
+      "sha256": "f67c7d6f48139d3e2e6019bd05a6cc92c571251fe79b643cff983d5cbaeba3c0",
+      "bytes": 3554
+    },
+    {
+      "path": "tests/storage.test.cjs",
+      "sha256": "146d8fc55337ace971a72fda639dc78e514dfa105935f92d532dbbae16756644",
+      "bytes": 5223
+    },
+    {
+      "path": "tests/sw.test.cjs",
+      "sha256": "1fa15bafc1c5f3e6ed045bc379481cae12d2154dc51492c9ea8d88e9172a250a",
+      "bytes": 1161
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "511809672d9a536f5e478d049be60699a88e9f50eea710139babe21d2fd8dcf7",
+      "bytes": 386
+    },
+    {
+      "path": "vercel.json",
+      "sha256": "b644a1e4b495541259687697371baa4cbb9161d52208edbba5d68f5ca7ff13a2",
+      "bytes": 1018
+    }
+  ]
+}
