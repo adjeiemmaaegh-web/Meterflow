@@ -1,4 +1,4 @@
-name: Publish MeterFlow to GitHub Pages
+name: Build static MeterFlow site for GitHub Pages
 
 on:
   push:
@@ -6,51 +6,51 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: meterflow-github-pages
+  group: meterflow-static-site
   cancel-in-progress: true
 
 jobs:
-  build:
+  publish-static:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out source
+      - name: Checkout application
         uses: actions/checkout@v4
-      - name: Set up Node.js
+        with:
+          persist-credentials: true
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install dependencies
+      - name: Install build dependencies
         run: npm install --no-audit --no-fund
-      - name: Build React 19 app
+      - name: Compile production React 19 site
         run: npm run build
-      - name: Prepare Pages subpath and offline installation
+      - name: Fix asset paths for the /Meterflow/ address
         run: node scripts/prepare-github-pages.mjs
         env:
           METERFLOW_PAGES_BASE: /Meterflow/
-      - name: Verify forecasts and storage
+      - name: Verify predictions and IndexedDB tests
         run: npm test
-      - name: Verify GitHub Pages paths
+      - name: Verify page links and PWA scope
         run: node tests/pages.test.cjs
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-      - name: Upload website artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - name: Deploy site
-        id: deploy
-        uses: actions/deploy-pages@v4
+      - name: Prepare already-built website files
+        run: |
+          mkdir -p "$RUNNER_TEMP/meterflow-pages"
+          cp -a dist/. "$RUNNER_TEMP/meterflow-pages/"
+          touch "$RUNNER_TEMP/meterflow-pages/.nojekyll"
+          if find "$RUNNER_TEMP/meterflow-pages" -type f | grep -Ei 'private.*import|\\.xlsx$|\\.xls$'; then
+            echo "Refusing to publish private reading files"
+            exit 1
+          fi
+      - name: Save built static website to gh-pages branch
+        run: |
+          git switch --orphan meterflow-pages-release
+          git rm -r -f .
+          git clean -fdx
+          cp -a "$RUNNER_TEMP/meterflow-pages/." .
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Publish ready-to-serve MeterFlow website"
+          git push -f origin HEAD:refs/heads/gh-pages
