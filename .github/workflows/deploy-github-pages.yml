@@ -1,0 +1,56 @@
+name: Publish MeterFlow to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: meterflow-github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build React 19 app
+        run: npm run build
+      - name: Prepare Pages subpath and offline installation
+        run: node scripts/prepare-github-pages.mjs
+        env:
+          METERFLOW_PAGES_BASE: /Meterflow/
+      - name: Verify forecasts and storage
+        run: npm test
+      - name: Verify GitHub Pages paths
+        run: node tests/pages.test.cjs
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload website artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy site
+        id: deploy
+        uses: actions/deploy-pages@v4
