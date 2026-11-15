@@ -100,3 +100,7 @@ The older local preview is not the production React 19 build.
 - `docs/QA_REPORT.md`: implementation, checks and outstanding release gates
 
 See `docs/PHONE_ACCEPTANCE_CHECKLIST.md` for owner-side phone QA.
+
+
+### Long-range forecast caution (v1.3)
+For forecasts **three or more days** after the latest actual meter reading, MeterFlow now projects each apartment's observed average daily change instead of repeatedly feeding predicted readings back into the pattern model. Long-range estimates are prominently marked as **not actual meter readings**. The prior 74.1% historical result describes only one-day retrospective testing on the original October data; it does **not** describe longer forecast accuracy. Before confirming any entire block, check every apartment against the physical meter. Save a draft when values have not been verified. Confirmed actual readings can reanchor subsequent forecasts.

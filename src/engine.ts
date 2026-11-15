@@ -108,22 +108,34 @@ namespace MeterEngine {
     let likelihood=eligible>=14?Math.round(100*reliability):null;
     if(horizon>1) likelihood=null; // Do not pass one-day hit rate off as multi-day probability.
     let confidence:Confidence='Low';
-    if(horizon>7 || recent.some(d=>d.flag))confidence='Caution';
+    if(horizon>=3 || recent.some(d=>d.flag))confidence='Caution';
     else if(eligible<14 || horizon>1)confidence='Low';
     else if(reliability>=.77 && validation.trials>=8)confidence='High';
     else if(reliability>=.64)confidence='Moderate';
     let predicted=anchor.value;
     let model:ForecastResult['model']='Frequent change';
     let increment=0;
-    const working=history.slice();
-    for(let i=0;i<horizon;i++){
-      const step=nextIncrement(working);
-      increment=step.increment;
-      model=step.model;
-      predicted+=step.increment;
-      // Predicted changes are ONLY temporary inputs for the multi-day scenario,
-      // never persisted and never used in historical training or next-session state.
-      working.push(step.increment);
+    if(horizon>=3){
+      // Feeding our own predicted daily changes back into the model causes
+      // unstable repeated patterns. Project only observed consecutive daily
+      // changes, excluding negative readings and increases above five units.
+      const observed=history.filter((v):v is number=>v!==null);
+      const average=observed.length?observed.reduce((sum,d)=>sum+d,0)/observed.length:0;
+      predicted=anchor.value+Math.round(average*horizon);
+      increment=predicted-anchor.value;
+      model='Historical daily average';
+      warnings.push(`Estimate spans ${horizon} days since the last recorded reading; obtain a new actual reading`);
+    }else{
+      const working=history.slice();
+      for(let i=0;i<horizon;i++){
+        const step=nextIncrement(working);
+        increment=step.increment;
+        model=step.model;
+        predicted+=step.increment;
+        // Forecast steps are temporary calculations, never saved as observations.
+        working.push(step.increment);
+      }
+      increment=predicted-anchor.value;
     }
     const good=history.filter((v):v is number=>v!==null);
     const ordered=good.slice().sort((x,y)=>x-y);
