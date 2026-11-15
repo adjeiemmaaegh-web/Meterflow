@@ -48,7 +48,7 @@ jobs:
       - name: Save built static website to gh-pages branch
         run: |
           git switch --orphan meterflow-pages-release
-          git rm -r -f .
+          git rm -r -f --ignore-unmatch . || true
           git clean -fdx
           cp -a "$RUNNER_TEMP/meterflow-pages/." .
           git add -A
