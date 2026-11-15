@@ -2,10 +2,10 @@
   "name": "meterflow-mobile",
   "version": "1.1.0",
   "private": true,
-  "description": "Private mobile water-meter PWA with maintained React 19 production bundle",
+  "description": "Ready-to-use mobile water-meter PWA with maintained React 19 production bundle",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build.mjs",
-    "test": "node tests/engine.test.cjs && node tests/storage.test.cjs && node tests/revision.test.cjs && node tests/sw.test.cjs",
+    "test": "node tests/engine.test.cjs && node tests/storage.test.cjs && node tests/revision.test.cjs && node tests/sw.test.cjs && node tests/bundled.test.cjs",
     "start": "node scripts/serve.mjs",
     "preview": "node scripts/serve.mjs",
     "build:legacy-preview": "tsc -p tsconfig.json && node scripts/build.mjs --legacy-preview",

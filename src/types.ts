@@ -35,7 +35,7 @@ interface MeterFlowState {
   apartments:Apartment[]; overrides:Override[]; activities:ActivityEntry[];
   files:StoredFile[]; meta:Metadata|null;
   tab:TabName; date:string; block:BlockName|'All'; search:string;
-  selected:string|null; editDate:string; editValue:string; editNote:string;
+  selected:string|null; quickApartment:string; editDate:string; editValue:string; editNote:string;
   showEditor:boolean; showImport:boolean; showDatePicker:boolean;
   sort:'number'|'attention'; showAll:boolean;
   pendingImport: boolean;
@@ -49,3 +49,5 @@ declare const React: {
 };
 declare const ReactDOM: {render:(node:any, container:Element|null)=>void};
 declare namespace JSX {interface IntrinsicElements { [elemName:string]:any; }}
+
+declare const MeterFlowBundledPack:()=>DatasetPack;

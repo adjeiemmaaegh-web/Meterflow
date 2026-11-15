@@ -17,3 +17,25 @@
 @media(min-width:700px){.app-shell{min-height:100vh;border-radius:25px 25px 0 0;margin-top:18px}.bottom-nav{border-radius:0 0 14px 14px}}@media(max-width:380px){.site-header{padding-inline:17px}.header-private{font-size:9px}.main-stack,.detail-view{padding-left:16px;padding-right:16px}.chips-scroll{margin-inline:-16px;padding-inline:16px}.hero-content{padding:25px 18px 20px}.hero-panel h1{font-size:35px}.date-target-text{font-size:12px}.stat-card{padding:14px 12px}.stat-value{font-size:27px}.spark-shell{flex-basis:100px}.apartment-card{padding-inline:13px}.onboard{padding-inline:18px}.big-meter{font-size:45px}.mini-metric{padding:12px 7px}.mini-metric strong{font-size:16px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
 
 .directory-date{margin:-7px 0 18px}.directory-date .date-control{background:#eaf5f1;border-color:#d8eae4;max-width:none}.directory-date .date-step{background:#d9eae3;color:#236f66}.directory-date .date-target-caption{color:#6c9990}.directory-date .date-target-text{color:#22695f;font-size:13px}
+
+/* Instant three-field forecast, optimized for narrow mobile screens */
+.quick-predictor{margin:12px 0 22px;background:#fff;border:1px solid #dfeae7;border-radius:22px;padding:18px;box-shadow:0 12px 35px rgba(28,76,73,.07)}
+.quick-predictor-title{display:flex;align-items:flex-start;gap:12px;margin-bottom:17px}
+.quick-predictor-title h2{font-size:21px;line-height:1.2;color:#123f43;letter-spacing:-.6px;margin:3px 0 6px}
+.quick-predictor-title p{font-size:12.5px;line-height:1.5;color:#69827e;margin:0}
+.quick-visual{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:41px;height:41px;border-radius:13px;background:#e7f4ef;color:#147f75}
+.quick-controls{display:grid;gap:11px}
+.quick-control-row{display:grid;grid-template-columns:1fr 1.25fr;gap:11px}
+.quick-label{font-weight:700;display:flex;flex-direction:column;gap:6px;font-size:11px;letter-spacing:.2px;color:#617c78}
+.quick-label select,.quick-label input{width:100%;min-width:0;height:45px;border:1px solid #d6e5e0;border-radius:11px;background:#f9fbfa;color:#204a4c;padding:0 12px;font:600 14px system-ui,sans-serif;outline:none}
+.quick-label select:focus,.quick-label input:focus{border-color:#209c90;box-shadow:0 0 0 3px #caeee5}
+.quick-result{margin-top:16px;padding:17px 16px;background:linear-gradient(135deg,#124b4c,#176b65);border-radius:16px;color:white;display:flex;flex-direction:column;gap:13px}
+.quick-result-label{font-size:10px;font-weight:750;letter-spacing:1.05px;color:#b4e5d9}
+.quick-result-number{font-size:40px;font-weight:800;letter-spacing:-1.5px;line-height:1.15;margin:6px 0 4px;font-variant-numeric:tabular-nums}
+.quick-result-number.no-result{font-size:22px;letter-spacing:-.5px}
+.quick-result-delta{vertical-align:middle;display:inline-block;margin-left:5px;padding:4px 7px;border-radius:8px;color:#c9f5df;background:rgba(255,255,255,.12);font-size:14px;letter-spacing:0}
+.quick-result-meta{font-weight:700;font-size:12px;color:#fff}
+.quick-result-method{font-size:11.5px;line-height:1.5;color:#c2e0d8;margin-top:7px}
+.quick-result-button{border:1px solid rgba(255,255,255,.3);background:#fff;color:#155c55;border-radius:10px;padding:11px 13px;display:flex;align-items:center;justify-content:center;gap:5px;font-weight:800;font-size:12.5px;cursor:pointer}
+.quick-disclaimer{font-size:11px;line-height:1.5;color:#778984;margin:12px 0 0}
+@media(min-width:620px){.quick-predictor{padding:23px}.quick-controls{grid-template-columns:1fr 1.4fr}.quick-result{flex-direction:row;align-items:center;justify-content:space-between}.quick-result-button{max-width:190px}.quick-result-number{font-size:44px}}

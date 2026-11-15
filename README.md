@@ -1,3 +1,21 @@
+# MeterFlow · Ready-to-use GitHub Pages forecast app
+
+**Open the website and choose a forecast date, block, and apartment. No initial import is necessary.**
+
+The site is deployed to `https://adjeiemmaaegh-web.github.io/Meterflow/` from the `gh-pages` branch. Historical readings from the owner-provided workbook are **included in the public site** (335 apartments, 10,050 dated readings, 9,715 day-to-day differences). Visitors can inspect or download the historical readings by viewing site assets. Corrections and uploaded files stay in their own browser's IndexedDB. No authentication or cross-device sync is provided.
+
+The default forecast is October 26, 2026, the day after the last workbook reading. Pick a date after September 26, 2026. Forecasts beyond the most recent actual can become unreliable. The model uses two-step, one-step, then frequency patterns with 0–5 normal deltas; it does **not guarantee** a future exact reading. Its 74.1% figure is a retrospective test, not a live accuracy claim. Flagged negative and large changes remain visible.
+
+### Phone
+Visit the HTTPS URL in Safari (iPhone) or Chrome (Android), choose a date, block and apartment, and tap **View history & correct** to save a verified actual reading. Install the PWA from the browser's share/menu options; when offline, the app serves cached site assets after a successful online visit. Back up your local data periodically because clearing browser data can erase corrections.
+
+### Build
+`npm install && npm run build && npm test` then `node scripts/prepare-github-pages.mjs` to prepare `/Meterflow/` subpaths. Automatic GitHub Action publishes the built files to the `gh-pages` branch; direct branch hosting does not require manual reruns.
+
+Historical baseline: `Daily water meter reading October 2026.xlsx`, SHA-256 `3967b8a2b8c28b41ce65be6ce42d483076d6d08038e2398459f9cadeac4eee8e`.
+
+---
+
 # MeterFlow Mobile v1.1 — React 19 source, offline-first PWA
 
 A mobile-first water meter prediction app for seven blocks and 335 apartments. Production source targets **React 19.3.1 + ReactDOM 19.3.1 + TypeScript 5.8.3**; IndexedDB stores imported readings, manual corrections, historical audit events, and archived files on the phone. No backend or login is required. **It is a PWA, not an APK or IPA.**

@@ -69,6 +69,23 @@ namespace MeterStorage {
     lastSeenRevision=(revision as {value?:number}|undefined)?.value||0;
     return {apartments:apartments as Apartment[],overrides:overrides as Override[],activities:(activities as ActivityEntry[]).sort((a,b)=>(b.id||0)-(a.id||0)),files:(files as StoredFile[]).sort((a,b)=>b.addedAt.localeCompare(a.addedAt)),meta:(meta as Metadata|undefined)||null};
   }
+  /** Initialize only an empty browser database from the public historical baseline.
+   * Never overwrite previously imported data or any local corrections. */
+  export async function seedBundledIfEmpty(pack:DatasetPack):Promise<void>{
+    const before=await snapshot();
+    if(before.apartments.length)return;
+    try{
+      await mutate(['apartments','events'],tx=>{
+        for(const apartment of pack.apartments)tx.objectStore('apartments').put(apartment);
+        tx.objectStore('meta').put({key:'dataset',name:pack.name,importedAt:new Date().toISOString(),sourceReport:pack.sourceReport||''} as Metadata);
+        tx.objectStore('events').add({kind:'dataset',timestamp:new Date().toISOString(),count:pack.apartments.length,note:'Loaded historical readings bundled with the public website'} as ActivityEntry);
+      });
+    }catch(e){
+      const after=await snapshot();
+      if(after.apartments.length)return; // a different tab initialized the data first
+      throw e;
+    }
+  }
   export async function importDataset(p:DatasetPack,file:File):Promise<void>{
     await mutate(['apartments','overrides','events','files'],tx=>{
       tx.objectStore('apartments').clear();
