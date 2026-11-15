@@ -1,6 +1,6 @@
 /** Global type declarations for the self-contained, offline-first React runtime. */
 type BlockName = 'A'|'B'|'C'|'D'|'E'|'F'|'G';
-type TabName = 'home' | 'apartments' | 'activity' | 'settings';
+type TabName = 'home' | 'apartments' | 'records' | 'activity' | 'settings';
 type Confidence = 'High'|'Moderate'|'Low'|'Caution';
 interface Reading { date:string; value:number; }
 interface Apartment { id:string; block:BlockName; number:string; type:string; readings:Reading[]; }
@@ -18,6 +18,14 @@ interface ActivityEntry {
   id?:number; kind:string; timestamp:string; apartmentId?:string;
   date?:string; before?:number|null; after?:number|null; note?:string; count?:number;
 }
+interface BlockReading {
+  apartmentId:string; number:string; floor:number; suggested:number; value:number;
+  origin:'forecast'|'recorded'; confidence:Confidence;
+}
+interface BlockSession {
+  id:string; date:string; block:BlockName; status:'draft'|'confirmed';
+  rows:BlockReading[]; draftRows?:BlockReading[]; updatedAt:string; confirmedAt:string|null; revision:number;
+}
 interface StoredFile { id:string; name:string; type:string; size:number; addedAt:string; data:Blob; }
 interface Metadata { key:'dataset'; name:string; importedAt:string; sourceReport?:string; }
 interface Backtest { hits:number; trials:number; }
@@ -33,12 +41,13 @@ interface ForecastResult {
 interface MeterFlowState {
   ready:boolean; loading:boolean; error:string; toast:string;
   apartments:Apartment[]; overrides:Override[]; activities:ActivityEntry[];
-  files:StoredFile[]; meta:Metadata|null;
+  files:StoredFile[]; sessions:BlockSession[]; meta:Metadata|null;
   tab:TabName; date:string; block:BlockName|'All'; search:string;
   selected:string|null; quickApartment:string; editDate:string; editValue:string; editNote:string;
   showEditor:boolean; showImport:boolean; showDatePicker:boolean;
   sort:'number'|'attention'; showAll:boolean;
   pendingImport: boolean;
+  dailyFloor:number; dailyReview:boolean; dailyEdits:{[id:string]:string}; dailyBusy:boolean;
 }
 declare const React: {
   createElement: (...args:any[])=>any;

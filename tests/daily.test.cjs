@@ -1,0 +1,36 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const ctx=vm.createContext({console,Date,Intl,Math,Map,Set,Number,String,Array,Error});
+for(const name of ['engine','daily'])vm.runInContext(fs.readFileSync(`dist/${name}.js`,'utf8'),ctx);
+vm.runInContext(fs.readFileSync('dist/bundled-readings.js','utf8'),ctx);
+const pack=ctx.MeterFlowBundledPack(),apts=pack.apartments,d=ctx.MeterDaily;
+assert.equal(d.floor('G01'),0);assert.equal(d.floor('G11'),0);assert.equal(d.floor('101'),1);assert.equal(d.floor('201'),2);assert.equal(d.floor('509'),5);
+assert.equal(d.floorLabel(0),'Ground floor');assert.equal(d.floorLabel(5),'Floor 5');
+assert.deepEqual([...d.floors(apts,'A')],[0,1,2,3]);
+assert.deepEqual([...d.floors(apts,'C')],[0,1,2,3,4]);
+assert.deepEqual([...d.floors(apts,'E')],[0,1,2,3,4,5]);
+const allCounts={A:49,B:49,C:42,D:51,E:51,F:51,G:42};
+for(const [block,count] of Object.entries(allCounts)){
+  const rows=d.buildRows(apts,[],'2026-10-26',block);
+  assert.equal(rows.length,count);assert.equal(rows[0].number,'G01');
+  assert.ok(rows.every(r=>Number.isSafeInteger(r.value)&&r.apartmentId.startsWith(block+':')));
+  d.validateRows(rows,apts,'2026-10-26',block);
+}
+let rows=d.buildRows(apts,[],'2026-10-26','E');
+rows[0].value+=3;
+let session=d.makeSession('2026-10-26','E',rows,undefined,'draft');
+assert.equal(session.status,'draft');assert.equal(session.rows[0].number,'G01');
+let saved=d.makeSession('2026-10-26','E',rows,session,'confirmed');
+assert.equal(saved.status,'confirmed');assert.equal(saved.revision,2);
+assert.equal(d.buildRows(apts,[],'2026-10-26','E',saved)[0].value,rows[0].value);
+rows=d.buildRows(apts,[],'2026-10-26','E',saved);rows[0].value+=2;
+const editedDraft=d.makeSession('2026-10-26','E',rows,saved,'draft');
+assert.equal(editedDraft.status,'confirmed','Original confirmed block remains while changes are drafted');
+assert.equal(editedDraft.rows[0].value,saved.rows[0].value);
+assert.equal(editedDraft.draftRows[0].value,rows[0].value);
+const revised=d.makeSession('2026-10-26','E',rows,editedDraft,'confirmed');
+assert.equal(revised.rows[0].value,rows[0].value);assert.equal(revised.draftRows,undefined);
+assert.throws(()=>d.validateRows(rows.slice(1),apts,'2026-10-26','E'),/entire block/i);
+assert.throws(()=>d.validateRows([...rows.slice(0,-1),rows[0]],apts,'2026-10-26','E'),/duplicate/i);
+rows[0].value=NaN;assert.throws(()=>d.validateRows(rows,apts,'2026-10-26','E'),/whole-number/i);
+console.log('✓ Date → block → ground-first floor ordering for all 335 apartments.');
+console.log('✓ Full-block drafts, confirmations, revisions, and invalid-reading protection.');

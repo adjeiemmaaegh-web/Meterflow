@@ -30,12 +30,13 @@ namespace MeterStorage {
     if(cached)return cached;
     cached=new Promise<IDBDatabase>((resolve,reject)=>{
       if(!('indexedDB' in window)){reject(Error('IndexedDB is unavailable in this browser.'));return;}
-      const request=indexedDB.open(NAME,1);
+      const request=indexedDB.open(NAME,2);
       request.onupgradeneeded=()=>{
         const db=request.result;
         if(!db.objectStoreNames.contains('apartments'))db.createObjectStore('apartments',{keyPath:'id'});
         if(!db.objectStoreNames.contains('overrides'))db.createObjectStore('overrides',{keyPath:'id'});
         if(!db.objectStoreNames.contains('events'))db.createObjectStore('events',{keyPath:'id',autoIncrement:true});
+        if(!db.objectStoreNames.contains('sessions'))db.createObjectStore('sessions',{keyPath:'id'});
         if(!db.objectStoreNames.contains('files'))db.createObjectStore('files',{keyPath:'id'});
         if(!db.objectStoreNames.contains('meta'))db.createObjectStore('meta',{keyPath:'key'});
       };
@@ -61,13 +62,13 @@ namespace MeterStorage {
       req.onerror=()=>reject(req.error||Error('A local storage request failed.'));
     });
   }
-  export async function snapshot():Promise<{apartments:Apartment[];overrides:Override[];activities:ActivityEntry[];files:StoredFile[];meta:Metadata|null}> {
+  export async function snapshot():Promise<{apartments:Apartment[];overrides:Override[];activities:ActivityEntry[];files:StoredFile[];sessions:BlockSession[];meta:Metadata|null}> {
     const db=await open();
-    const tx=db.transaction(['apartments','overrides','events','files','meta'],'readonly');
-    const ps=[request(tx.objectStore('apartments').getAll()),request(tx.objectStore('overrides').getAll()),request(tx.objectStore('events').getAll()),request(tx.objectStore('files').getAll()),request(tx.objectStore('meta').get('dataset')),request(tx.objectStore('meta').get('revision'))];
-    const [apartments,overrides,activities,files,meta,revision]=await Promise.all(ps);
+    const tx=db.transaction(['apartments','overrides','events','files','sessions','meta'],'readonly');
+    const ps=[request(tx.objectStore('apartments').getAll()),request(tx.objectStore('overrides').getAll()),request(tx.objectStore('events').getAll()),request(tx.objectStore('files').getAll()),request(tx.objectStore('sessions').getAll()),request(tx.objectStore('meta').get('dataset')),request(tx.objectStore('meta').get('revision'))];
+    const [apartments,overrides,activities,files,sessions,meta,revision]=await Promise.all(ps);
     lastSeenRevision=(revision as {value?:number}|undefined)?.value||0;
-    return {apartments:apartments as Apartment[],overrides:overrides as Override[],activities:(activities as ActivityEntry[]).sort((a,b)=>(b.id||0)-(a.id||0)),files:(files as StoredFile[]).sort((a,b)=>b.addedAt.localeCompare(a.addedAt)),meta:(meta as Metadata|undefined)||null};
+    return {apartments:apartments as Apartment[],overrides:overrides as Override[],activities:(activities as ActivityEntry[]).sort((a,b)=>(b.id||0)-(a.id||0)),files:(files as StoredFile[]).sort((a,b)=>b.addedAt.localeCompare(a.addedAt)),sessions:(sessions as BlockSession[]).sort((a,b)=>b.date.localeCompare(a.date)||a.block.localeCompare(b.block)),meta:(meta as Metadata|undefined)||null};
   }
   /** Initialize only an empty browser database from the public historical baseline.
    * Never overwrite previously imported data or any local corrections. */
@@ -87,13 +88,38 @@ namespace MeterStorage {
     }
   }
   export async function importDataset(p:DatasetPack,file:File):Promise<void>{
-    await mutate(['apartments','overrides','events','files'],tx=>{
+    await mutate(['apartments','overrides','events','files','sessions'],tx=>{
       tx.objectStore('apartments').clear();
       tx.objectStore('overrides').clear();
+      tx.objectStore('sessions').clear();
       for(const a of p.apartments)tx.objectStore('apartments').put(a);
       tx.objectStore('meta').put({key:'dataset',name:p.name,importedAt:new Date().toISOString(),sourceReport:p.sourceReport||''} as Metadata);
       tx.objectStore('events').add({kind:'dataset',timestamp:new Date().toISOString(),count:p.apartments.length,note:'Imported source data; previous corrections cleared'} as ActivityEntry);
       tx.objectStore('files').put({id:crypto.randomUUID(),name:file.name,type:file.type||'application/json',size:file.size,addedAt:new Date().toISOString(),data:file} as StoredFile);
+    });
+  }
+  /** Drafts are local and do not become actual readings until the whole block is confirmed. */
+  export async function saveBlockDraft(session:BlockSession,apartments:Apartment[]):Promise<void>{
+    const proposed=session.draftRows||session.rows;
+    MeterDaily.validateRows(proposed,apartments,session.date,session.block);
+    if(session.id!==`${session.date}|${session.block}`)throw Error('Invalid block session key.');
+    await mutate(['sessions','events'],tx=>{
+      tx.objectStore('sessions').put(session);
+      tx.objectStore('events').add({kind:'block-draft',timestamp:new Date().toISOString(),date:session.date,count:proposed.length,note:`Block ${session.block}: draft saved for ${session.date}`} as ActivityEntry);
+    });
+  }
+  /** One atomic device transaction confirms the whole block and its daily readings. */
+  export async function confirmBlock(session:BlockSession,apartments:Apartment[]):Promise<void>{
+    if(session.status!=='confirmed'||session.draftRows?.length)throw Error('Review the whole block before confirming.');
+    MeterDaily.validateRows(session.rows,apartments,session.date,session.block);
+    if(session.id!==`${session.date}|${session.block}`)throw Error('Invalid block session key.');
+    const now=new Date().toISOString();
+    await mutate(['sessions','overrides','events'],tx=>{
+      tx.objectStore('sessions').put(session);
+      for(const row of session.rows){
+        tx.objectStore('overrides').put({id:`${row.apartmentId}|${session.date}`,apartmentId:row.apartmentId,date:session.date,value:row.value,note:`Confirmed in Block ${session.block} daily review`,updatedAt:now} as Override);
+      }
+      tx.objectStore('events').add({kind:'block-confirmed',timestamp:now,date:session.date,count:session.rows.length,note:`Block ${session.block}: all ${session.rows.length} readings confirmed (revision ${session.revision})`} as ActivityEntry);
     });
   }
   export async function saveCorrection(row:Override,previous:number|null):Promise<void>{
@@ -173,14 +199,25 @@ namespace MeterStorage {
     const s=await snapshot();
     const contents=[];
     for(const f of s.files)contents.push({name:f.name,type:f.type,addedAt:f.addedAt,dataUrl:await toDataUrl(f.data)});
-    const pack={kind:'meterflow-backup',schemaVersion:1,exportedAt:new Date().toISOString(),dataset:{kind:'meterflow-dataset',schemaVersion:1,name:s.meta?.name||'MeterFlow readings',apartments:s.apartments},overrides:s.overrides,activities:s.activities,files:contents};
+    const pack={kind:'meterflow-backup',schemaVersion:2,exportedAt:new Date().toISOString(),dataset:{kind:'meterflow-dataset',schemaVersion:1,name:s.meta?.name||'MeterFlow readings',apartments:s.apartments},overrides:s.overrides,sessions:s.sessions,activities:s.activities,files:contents};
     return new Blob([JSON.stringify(pack)],{type:'application/json'});
   }
   export async function restoreBackup(raw:any):Promise<void>{
-    if(!raw||raw.kind!=='meterflow-backup'||raw.schemaVersion!==1)throw Error('Unsupported backup file.');
+    if(!raw||raw.kind!=='meterflow-backup'||![1,2].includes(raw.schemaVersion))throw Error('Unsupported backup file.');
     const data=MeterEngine.validateDataset(raw.dataset);
     if(!Array.isArray(raw.overrides)||!Array.isArray(raw.files)||!Array.isArray(raw.activities)||raw.files.length>2000||raw.overrides.length>100000)throw Error('Invalid backup entries.');
     const known=new Set(data.apartments.map(a=>a.id));
+    const savedSessions:BlockSession[]=[];
+    if(raw.schemaVersion===2){
+      if(!Array.isArray(raw.sessions)||raw.sessions.length>10000)throw Error('Invalid saved daily records in backup.');
+      for(const x of raw.sessions){
+        if(!x||!['draft','confirmed'].includes(x.status)||x.id!==`${x.date}|${x.block}`||!Number.isSafeInteger(x.revision)||x.revision<1)throw Error('Invalid saved block record.');
+        MeterDaily.validateRows(x.rows,data.apartments,x.date,x.block);
+        if(x.draftRows)MeterDaily.validateRows(x.draftRows,data.apartments,x.date,x.block);
+        if(savedSessions.some(y=>y.id===x.id))throw Error('Duplicate block record in backup.');
+        savedSessions.push(x);
+      }
+    }
     const corrections:Override[]=raw.overrides.map((x:any)=>{
       if(!x||!known.has(x.apartmentId)||!MeterEngine.validDate(x.date)||!Number.isSafeInteger(x.value)||x.value<0||x.value>1e9)throw Error('Backup has invalid corrections.');
       return {id:`${x.apartmentId}|${x.date}`,apartmentId:x.apartmentId,date:x.date,value:x.value,note:String(x.note||'').slice(0,300),updatedAt:String(x.updatedAt||new Date().toISOString())};
@@ -192,13 +229,14 @@ namespace MeterStorage {
       const blob=await response.blob();
       files.push({id:crypto.randomUUID(),name:String(item.name||'archive').slice(0,150),type:String(item.type||'application/octet-stream'),size:blob.size,addedAt:new Date().toISOString(),data:blob});
     }
-    await mutate(['apartments','overrides','events','files'],tx=>{
-      for(const store of ['apartments','overrides','events','files','meta']){
+    await mutate(['apartments','overrides','events','files','sessions'],tx=>{
+      for(const store of ['apartments','overrides','events','files','sessions','meta']){
         // Preserve the meta revision record so the transaction can advance it.
         if(store!=='meta')tx.objectStore(store).clear();
       }
       for(const a of data.apartments)tx.objectStore('apartments').put(a);
       for(const o of corrections)tx.objectStore('overrides').put(o);
+      for(const session of savedSessions)tx.objectStore('sessions').put(session);
       for(const e of raw.activities.slice().reverse()){
         if(e&&typeof e.kind==='string'){
           const {id,...clean}=e;tx.objectStore('events').add(clean);

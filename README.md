@@ -1,3 +1,16 @@
+# MeterFlow v1.2 — Daily Block Review & Confirmation
+
+Open **https://adjeiemmaaegh-web.github.io/Meterflow/** on your phone. The 335 historical apartment readings are built into this *public* GitHub Pages website. No import is needed. On the **Daily** tab, choose a date, block A–G and a floor (Ground, 1, 2, etc.). Every floor lists the correct apartment numbers, starting from G01. Edit readings, switch floors without losing current edits, optionally **Save draft**, then **Preview entire block** to inspect all apartments on one page and edit them there. Press **Confirm & save** once for the whole block. The **Saved** tab lets you reopen a previous date and block, review all saved readings and reconfirm amendments. Data is saved on your current browser/device using IndexedDB. Confirming a full block accepts displayed estimates as verified readings; do not confirm unmeasured estimates without checking. Confirmed readings become historical actual values for future forecasts. Historical source values remain recoverable in the bundled dataset.
+
+- Drafts are stored in IndexedDB and do not affect predictions until confirmation. Editing a confirmed record as a draft retains its last confirmed values.
+- Confirmation writes the full block and its actual readings in one IndexedDB transaction. Multiple-tab version conflicts fail closed rather than silently overwriting newer data.
+- Block records and drafts are included in full JSON backup/restore (backup schema v2); legacy v1 backups still restore.
+- Browser storage is local and may be lost when site data is cleared. Export regular private backups. No account synchronization.
+- The initial historical meter readings are included in public website assets. Only the owner's locally saved confirmations, edits and files remain private to the browser by default.
+- Deployment: GitHub Actions builds React 19 and publishes static `gh-pages` files, then GitHub Pages serves `/Meterflow/`. No visitor-side build or import.
+
+---
+
 # MeterFlow · Ready-to-use GitHub Pages forecast app
 
 **Open the website and choose a forecast date, block, and apartment. No initial import is necessary.**

@@ -48,7 +48,7 @@ function MiniLine(props:{values:number[];forecast?:number;width?:number;height?:
 }
 function EmptyState(props:{icon:string;title:string;text:string;children?:any}):any {return <div className="empty-state"><div className="empty-state-icon"><Icon name={props.icon} size={26}/></div><h3>{props.title}</h3><p>{props.text}</p>{props.children}</div>;}
 class MeterFlowApp extends React.Component {
- state:MeterFlowState={ready:false,loading:true,error:'',toast:'',apartments:[],overrides:[],activities:[],files:[],meta:null,tab:'home',date:'2026-10-26',block:'All',search:'',selected:null,quickApartment:'',editDate:'2026-10-26',editValue:'',editNote:'',showEditor:false,showImport:false,showDatePicker:false,sort:'number',showAll:false,pendingImport:false};
+ state:MeterFlowState={ready:false,loading:true,error:'',toast:'',apartments:[],overrides:[],activities:[],files:[],meta:null,tab:'home',date:'2026-10-26',block:'All',search:'',selected:null,quickApartment:'',editDate:'2026-10-26',editValue:'',editNote:'',showEditor:false,showImport:false,showDatePicker:false,sort:'number',showAll:false,pendingImport:false,sessions:[],dailyFloor:0,dailyReview:false,dailyEdits:{},dailyBusy:false};
  private toastTimer:any=null;
  private installEvent:any=null;
  private predictionsCache:{apartments:Apartment[];overrides:Override[];date:string;value:ForecastResult[]}|null=null;
@@ -177,7 +177,52 @@ class MeterFlowApp extends React.Component {
    return value;
  }
  private scoped(rs:ForecastResult[]):ForecastResult[]{return this.state.block==='All'?rs:rs.filter(r=>r.apartment.block===this.state.block);}
- private nav(next:TabName):void {this.setState({tab:next,selected:null,search:'',showAll:false,error:''});window.scrollTo(0,0);}
+ private nav(next:TabName):void {if(!this.allowLeaveDraft())return;this.setState({tab:next,selected:null,search:'',showAll:false,error:'',dailyReview:false});window.scrollTo(0,0);} 
+ private allowLeaveDraft():boolean {return Object.keys(this.state.dailyEdits).length===0||window.confirm('You have unsaved reading edits. Leave without saving a draft?');}
+ private chooseDailyScope(change:{date?:string;block?:BlockName}):void {
+   if(!this.allowLeaveDraft())return;
+   const date=change.date||this.state.date, block=change.block||this.dailyBlock();
+   if(!MeterEngine.validDate(date)||date<='2026-09-26')return;
+   const floors=MeterDaily.floors(this.state.apartments,block);
+   this.setState({date,block,dailyFloor:floors[0]||0,dailyEdits:{},dailyReview:false,error:''});
+ }
+ private dailyBlock():BlockName {return this.state.block==='All'?'A':this.state.block;}
+ private currentSession():BlockSession|undefined {return this.state.sessions.find(s=>s.id===`${this.state.date}|${this.dailyBlock()}`);}
+ private dailyRows():BlockReading[] {
+   const rows=MeterDaily.buildRows(this.state.apartments,this.state.overrides,this.state.date,this.dailyBlock(),this.currentSession());
+   return rows.map(r=>{
+     const typed=this.state.dailyEdits[r.apartmentId];
+     return typed===undefined?r:{...r,value:/^\d+$/.test(typed)?Number(typed):NaN};
+   });
+ }
+ private dailyInput(row:BlockReading):any {return <input className={`daily-value-input ${row.value!==row.suggested?'changed':''}`} type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" aria-label={`Reading for apartment ${row.number}`} value={this.state.dailyEdits[row.apartmentId]??(Number.isFinite(row.value)?String(row.value):'')} onChange={(e:any)=>{const value=e.target.value;this.setState((old:any)=>({dailyEdits:{...old.dailyEdits,[row.apartmentId]:value}}));}}/>;}
+ private dailyRow(row:BlockReading,compact=false):any {return <div className={`daily-row ${row.value!==row.suggested?'daily-row-edited':''}`} key={row.apartmentId}><div className="daily-unit"><strong>{row.number}</strong><small>{row.origin==='recorded'?'Recorded baseline':'Predicted'} · {row.confidence}</small></div><div className="daily-suggestion"><small>{row.origin==='recorded'?'Original':'Forecast'}</small><strong>{formatNumber(row.suggested)}</strong></div><div className="daily-final"><small>{compact?'Final reading':'Reading to save'}</small>{this.dailyInput(row)}</div></div>;}
+ private async saveDailyDraft():Promise<void> {
+   if(this.state.dailyBusy)return;
+   try{
+     const rows=this.dailyRows();MeterDaily.validateRows(rows,this.state.apartments,this.state.date,this.dailyBlock());
+     this.setState({dailyBusy:true,error:''});
+     await MeterStorage.saveBlockDraft(MeterDaily.makeSession(this.state.date,this.dailyBlock(),rows,this.currentSession(),'draft'),this.state.apartments);
+     await this.refresh();this.setState({dailyEdits:{},dailyBusy:false});this.notify('Full block draft saved on this device');
+   }catch(e){this.setState({dailyBusy:false});this.fail(e);}
+ }
+ private async confirmDailyBlock():Promise<void> {
+   if(this.state.dailyBusy||!this.state.dailyReview)return;
+   try{
+     const rows=this.dailyRows(),block=this.dailyBlock(),date=this.state.date;
+     MeterDaily.validateRows(rows,this.state.apartments,date,block);
+     const changed=rows.filter(r=>r.value!==r.suggested).length;
+     if(!window.confirm(`Confirm all ${rows.length} readings for Block ${block} on ${date}? This accepts the listed values as actual readings for future predictions (${changed} changed from the initial values).`))return;
+     this.setState({dailyBusy:true,error:''});
+     await MeterStorage.confirmBlock(MeterDaily.makeSession(date,block,rows,this.currentSession(),'confirmed'),this.state.apartments);
+     await this.refresh();this.setState({dailyEdits:{},dailyReview:false,dailyBusy:false});this.notify(`Block ${block}: ${rows.length} readings confirmed and saved`);
+   }catch(e){this.setState({dailyBusy:false});this.fail(e);}
+ }
+ private openSaved(s:BlockSession):void {
+   if(!this.allowLeaveDraft())return;
+   this.setState({date:s.date,block:s.block,dailyFloor:0,dailyEdits:{},dailyReview:true,tab:'home',selected:null,error:''});window.scrollTo(0,0);
+ }
+
  private header():any {return <header className="site-header"><div className="header-brand"><span className="brand-mark"><Icon name="drop" size={19} stroke={2.2}/></span><span className="brand-name">meter<span>flow</span><small>SMART METER READINGS</small></span></div><div className="header-right"><span className="header-private"><span className="status-pulse"/>On this device</span><button type="button" className="header-avatar" aria-label="Open settings" onClick={()=>this.nav('settings')}><Icon name="settings" size={20}/></button></div></header>;}
  private blockChips():any {return <div className="chips-scroll" role="group" aria-label="Filter by block">{(['All','A','B','C','D','E','F','G'] as const).map(b=><button key={b} className={`chip ${this.state.block===b?'active':''}`} type="button" onClick={()=>this.setState({block:b})}>{b==='All'?'All blocks':`Block ${b}`}</button>)}</div>;}
  private daySelector():any {return <div className="date-control"><button className="date-step" type="button" aria-label="Previous day" onClick={()=>this.setState({date:MeterEngine.nextDate(this.state.date,-1)})}><Icon name="back" size={20}/></button><label className="date-target"><span className="date-target-caption">FORECAST DATE</span><span className="date-target-text"><Icon name="calendar" size={15}/>{MeterEngine.formatDate(this.state.date,{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</span><input aria-label="Choose forecast date" type="date" min="2026-01-01" max="2100-12-31" value={this.state.date} onChange={(e:any)=>{if(MeterEngine.validDate(e.target.value))this.setState({date:e.target.value});}} /></label><button className="date-step" type="button" aria-label="Next day" onClick={()=>this.setState({date:MeterEngine.nextDate(this.state.date,1)})}><Icon name="arrow" size={20}/></button></div>;}
@@ -214,6 +259,46 @@ class MeterFlowApp extends React.Component {
        {result?<button type="button" className="quick-result-button" onClick={()=>{this.setState({selected:id,error:''});window.scrollTo(0,0);}}>View history &amp; correct <Icon name="arrow" size={17}/></button>:null}</div>
      <p className="quick-disclaimer">Forecasts estimate readings, not actual meter measurements. Older dates use only earlier readings; corrections are stored privately on your phone.</p>
    </section>;
+ }
+
+ private daily(rs:ForecastResult[]):any {
+   const block=this.dailyBlock(),levels=MeterDaily.floors(this.state.apartments,block),saved=this.currentSession();
+   let rows:BlockReading[]=[];let unavailable='';
+   try{rows=this.dailyRows();}catch(e){unavailable=e instanceof Error?e.message:String(e);}
+   const edited=rows.filter(r=>r.value!==r.suggested).length;
+   const total=rows.length,invalid=rows.some(r=>!Number.isSafeInteger(r.value)||r.value<0||r.value>1e9);
+   const selectedFloor=levels.includes(this.state.dailyFloor)?this.state.dailyFloor:levels[0];
+   const shown=rows.filter(r=>r.floor===selectedFloor);
+   return <main className="main-stack daily-page">
+     <div className="daily-heading"><span className="section-overline">DAILY READING WORKSPACE</span><h1>Today's readings<span className="heading-dot">.</span></h1><p>Choose the date and block, check each floor, then confirm the entire block once.</p></div>
+     <div className="daily-selectors"><label className="quick-label">Reading date<input type="date" aria-label="Reading date" min="2026-09-27" max="2100-12-31" value={this.state.date} onChange={(e:any)=>this.chooseDailyScope({date:e.target.value})}/></label><label className="quick-label">Select block<select aria-label="Daily block" value={block} onChange={(e:any)=>this.chooseDailyScope({block:e.target.value})}>{(['A','B','C','D','E','F','G'] as BlockName[]).map(b=><option key={b} value={b}>Block {b}</option>)}</select></label></div>
+     <section className="daily-status"><div><span className="daily-status-caption">BLOCK {block} · {compactDate(this.state.date)}</span><strong>{total} apartments</strong><small>{saved?.status==='confirmed'?(saved.draftRows?'Confirmed · draft changes pending':'Confirmed & saved'):saved?'Draft saved on device':'Not yet confirmed'}{edited?` · ${edited} edited`:''}</small></div><div className={`daily-status-symbol ${saved?.status==='confirmed'?'confirmed':''}`}><Icon name={saved?.status==='confirmed'?'shield':'building'} size={23}/></div></section>
+     {unavailable?<EmptyState icon="calendar" title="No readings for this date" text={unavailable}/>:this.state.dailyReview?<>
+       <div className="daily-review-top"><button className="back-button" type="button" onClick={()=>this.setState({dailyReview:false})}><Icon name="back" size={17}/> Return to floors</button><span className="review-chip">Full block review</span></div>
+       <div className="daily-section-title"><h2>Review all {total} apartments</h2><p>Every floor is shown below. You can edit any reading here before confirming the entire block.</p></div>
+       <div className="daily-review-summary"><span><Icon name="check" size={16}/> {total} readings ready</span><span><Icon name="edit" size={16}/> {edited} adjusted</span></div>
+       {levels.map(level=><section className="daily-floor-section" key={level}><div className="daily-floor-title"><strong>{MeterDaily.floorLabel(level)}</strong><small>{rows.filter(r=>r.floor===level).length} apartments</small></div><div className="daily-rows">{rows.filter(r=>r.floor===level).map(r=>this.dailyRow(r,true))}</div></section>)}
+       <div className="daily-review-actions"><p><Icon name="info" size={17}/> Confirming means you have checked and accepted each displayed reading as an actual meter reading. All {total} readings are saved together and used for later predictions.</p><button type="button" className="primary-button" disabled={invalid||this.state.dailyBusy} onClick={()=>this.confirmDailyBlock()}><Icon name="check" size={19}/>{this.state.dailyBusy?'Saving…':`Confirm & save all ${total} readings`}</button><button type="button" className="daily-secondary" disabled={invalid||this.state.dailyBusy} onClick={()=>this.saveDailyDraft()}><Icon name="download" size={17}/> Save edits as draft instead</button></div>
+     </>:<>
+       <div className="daily-section-title"><h2>Select a floor</h2><p>Ground floor comes first, followed by Floor 1, Floor 2 and higher floors.</p></div>
+       <div className="daily-floor-tabs" role="group" aria-label="Select floor">{levels.map(level=><button key={level} type="button" aria-pressed={selectedFloor===level} className={selectedFloor===level?'selected':''} onClick={()=>this.setState({dailyFloor:level})}>{level===0?'Ground':`Floor ${level}`}</button>)}</div>
+       <div className="daily-floor-title"><strong>{MeterDaily.floorLabel(selectedFloor)}</strong><small>{shown.length} apartments</small></div>
+       <div className="daily-rows">{shown.map(row=>this.dailyRow(row))}</div>
+       <div className="daily-floor-actions"><button type="button" className="primary-button" disabled={invalid||this.state.dailyBusy||!total} onClick={()=>{this.setState({dailyReview:true,error:''});window.scrollTo(0,0);}}> <Icon name="file" size={19}/> Preview entire Block {block} ({total})</button><button className="daily-secondary" disabled={invalid||this.state.dailyBusy||!total} type="button" onClick={()=>this.saveDailyDraft()}><Icon name="download" size={18}/> Save draft and continue later</button></div>
+       <p className="daily-help">Switch floors freely: changes stay in this workspace. A draft is not an actual reading until you confirm the entire block.</p>
+     </>}
+     {this.state.error?<div className="daily-form-error" role="alert">{this.state.error}</div>:null}
+   </main>;
+ }
+ private records():any {
+   const sessions=this.state.sessions.slice().sort((a,b)=>b.date.localeCompare(a.date)||a.block.localeCompare(b.block));
+   const dates=[...new Set(sessions.map(s=>s.date))];
+   return <main className="main-stack daily-records"><div className="page-title"><span className="section-overline">YOUR SAVED WORK</span><h1>Daily records<span className="heading-dot">.</span></h1><p>Reopen yesterday's block, review every apartment and make changes. Saved records stay on this phone.</p></div>
+     {sessions.length? <><div className="records-summary"><Icon name="clock" size={21}/><div><strong>{sessions.filter(s=>s.status==='confirmed').length} confirmed block records</strong><small>{dates.length} recorded dates · {sessions.filter(s=>s.status==='draft'||s.draftRows?.length).length} with pending drafts</small></div></div>
+       {dates.map(date=><section className="records-day" key={date}><div className="daily-floor-title"><strong>{MeterEngine.formatDate(date,{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</strong><small>{sessions.filter(s=>s.date===date).length} blocks</small></div>{sessions.filter(s=>s.date===date).map(session=><button type="button" className="record-link" key={session.id} onClick={()=>this.openSaved(session)}><span className="record-block">{session.block}</span><span><strong>Block {session.block}</strong><small>{session.rows.length} apartments · {session.status==='confirmed'?'Confirmed':'Draft'}{session.draftRows?.length?' · pending edits':''}</small></span><Icon name="arrow" size={19}/></button>)}</section>)}
+     </>:<EmptyState icon="file" title="No saved days yet" text="Choose a date and block on the Daily tab. Save a draft or confirm the entire block to see it here."/>}
+     <div className="section-header"><h2>Change history</h2></div><div className="records-audit">{this.state.activities.filter(e=>['block-confirmed','block-draft'].includes(e.kind)).slice(0,10).map((event,i)=><div className="audit-line" key={event.id??i}><Icon name="clock" size={16}/><span>{event.note}<small>{new Date(event.timestamp).toLocaleString('en-GB')}</small></span></div>)}</div>
+   </main>;
  }
  private home(rs:ForecastResult[]):any {
    const scoped=this.scoped(rs);
@@ -265,7 +350,7 @@ class MeterFlowApp extends React.Component {
      <div className="vault-list">{this.state.files.length?this.state.files.map(f=><div className="vault-row" key={f.id}><span className="vault-file-icon"><Icon name="file" size={20}/></span><div className="vault-name"><strong title={f.name}>{f.name}</strong><small>{(f.size/1024).toFixed(1)} KB · {new Date(f.addedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</small></div><button type="button" aria-label={`Download ${f.name}`} onClick={()=>MeterStorage.download(f.data,f.name)}><Icon name="download" size={18}/></button><button type="button" aria-label={`Delete ${f.name}`} onClick={()=>{if(window.confirm(`Delete ${f.name} from this device?`))MeterStorage.deleteFile(f.id,f.name).then(()=>this.refresh()).catch(e=>this.fail(e));}}><Icon name="trash" size={18}/></button></div>):<div className="vault-empty"><Icon name="file" size={25}/><strong>Your vault is empty</strong><span>Add an Excel workbook, a report or any file up to 25 MB.</span></div>}</div>
      <div className="section-header"><h2>Install on your phone</h2></div><div className="install-card"><div className="install-icon"><Icon name="download" size={24}/></div><div><strong>Use MeterFlow like an app</strong><p>Install from your browser for a full-screen mobile experience. Works offline after the first online load.</p></div><button type="button" className="outline-button" onClick={this.install}>Install / instructions</button></div>
      <div className="disclaimer"><Icon name="info" size={18}/><p><strong>Important:</strong> IndexedDB is specific to this browser and phone. It is not cloud sync. The data is not app-encrypted: protect your phone. Browser data clearing or uninstalling may erase it. Export and protect a private backup regularly. On iPhone, install from Safari; on Android, use Chrome's install option. Forecasts are estimates, not meter measurements or bills.</p></div>
-     <div className="settings-footer">METERFLOW / MOBILE EDITION <span>v1.1 · Offline-first</span></div>
+     <div className="settings-footer">METERFLOW / MOBILE EDITION <span>v1.2 · Offline-first</span></div>
    </main>;
  }
  private editor():any {
@@ -282,7 +367,7 @@ class MeterFlowApp extends React.Component {
    </form></div></div>;
  }
  private onboard():any {return <div className="onboard"><div className="onboard-content"><h1>Readings not available</h1><p>MeterFlow includes the historical readings automatically. Reload to try again, or check that your browser allows local storage.</p><button className="primary-button" onClick={this.refresh} type="button">Retry loading readings</button></div></div>;}
- private renderFooter():any {const tabs:{id:TabName;label:string;icon:string}[]=[{id:'home',label:'Home',icon:'home'},{id:'apartments',label:'Apartments',icon:'building'},{id:'activity',label:'Activity',icon:'clock'},{id:'settings',label:'Settings',icon:'settings'}];return <nav className="bottom-nav" aria-label="Main navigation">{tabs.map(t=><button key={t.id} className={`tab-item ${this.state.tab===t.id?'selected':''}`} type="button" onClick={()=>this.nav(t.id)} aria-current={this.state.tab===t.id?'page':undefined}><span className="tab-icon"><Icon name={t.icon} size={21}/></span><span>{t.label}</span></button>)}</nav>;}
+ private renderFooter():any {const tabs:{id:TabName;label:string;icon:string}[]=[{id:'home',label:'Daily',icon:'calendar'},{id:'apartments',label:'Browse',icon:'building'},{id:'records',label:'Saved',icon:'clock'},{id:'settings',label:'Settings',icon:'settings'}];return <nav className="bottom-nav" aria-label="Main navigation">{tabs.map(t=><button key={t.id} className={`tab-item ${this.state.tab===t.id?'selected':''}`} type="button" onClick={()=>this.nav(t.id)} aria-current={this.state.tab===t.id?'page':undefined}><span className="tab-icon"><Icon name={t.icon} size={21}/></span><span>{t.label}</span></button>)}</nav>;}
  render():any {
    if(this.state.loading)return <div className="loading-app"><div className="loading-brand"><Icon name="drop" size={40}/></div><h2>meterflow</h2><p>Loading historical readings and predictions…</p></div>;
    if(!this.state.ready)return <div className="error-screen"><Icon name="alert" size={36}/><h2>Device storage unavailable</h2><p>{this.state.error||'IndexedDB could not be opened.'}</p><p>Open the app in a regular Safari or Chrome tab over HTTPS. Private browsing or strict storage restrictions can prevent offline saving.</p><button className="primary-button" type="button" onClick={this.refresh}>Try again</button></div>;
@@ -291,7 +376,7 @@ class MeterFlowApp extends React.Component {
      <input className="hidden-input" id="data-input" type="file" accept=".json,application/json" onChange={(e:any)=>this.onFile(e,true)}/>
      <input className="hidden-input" id="csv-input" type="file" accept=".csv,text/csv" onChange={(e:any)=>this.onFile(e)}/>
      <input className="hidden-input" id="vault-input" type="file" onChange={(e:any)=>this.onVaultFile(e)}/>
-     {this.state.apartments.length? <div>{this.header()}{selected?this.detail(selected):this.state.tab==='home'?this.home(rs):this.state.tab==='apartments'?this.apartmentList(rs):this.state.tab==='activity'?this.activity():this.settings()}{!selected?this.renderFooter():null}{this.editor()}</div>:<div>{this.header()}{this.onboard()}</div>}
+     {this.state.apartments.length? <div>{this.header()}{selected?this.detail(selected):this.state.tab==='home'?this.daily(rs):this.state.tab==='apartments'?this.apartmentList(rs):this.state.tab==='records'?this.records():this.state.tab==='activity'?this.activity():this.settings()}{!selected?this.renderFooter():null}{this.editor()}</div>:<div>{this.header()}{this.onboard()}</div>}
      {this.state.toast?<div className="toast" role="status"><Icon name="check" size={17}/>{this.state.toast}</div>:null}
      {this.state.error&&!this.state.showEditor&&this.state.apartments.length?<div className="error-toast" role="alert"><Icon name="alert" size={18}/><span>{this.state.error}</span><button type="button" aria-label="Dismiss error" onClick={()=>this.setState({error:''})}><Icon name="close" size={17}/></button></div>:null}
    </div>;
