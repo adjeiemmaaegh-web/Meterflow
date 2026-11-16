@@ -35,7 +35,7 @@ interface ForecastResult {
   confidence:Confidence; likelihood:number|null; reference:[number,number]|null;
   actual:number|null; isCorrected:boolean; warnings:string[];
   eligible:number; recentDeltas:{date:string;delta:number;flag:boolean}[];
-  trend:number[]; model:'Two-step pattern'|'One-step pattern'|'Frequent change'|'Historical daily average';
+  trend:number[]; model:'Two-step pattern'|'One-step pattern'|'Frequent change'|'Historical daily average'|'Adaptive transitions'|'Two-day distribution'|'Robust observed trend'|'Blended consumption rate';
   validation:Backtest;
 }
 interface MeterFlowState {

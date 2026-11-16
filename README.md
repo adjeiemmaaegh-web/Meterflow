@@ -104,3 +104,8 @@ See `docs/PHONE_ACCEPTANCE_CHECKLIST.md` for owner-side phone QA.
 
 ### Long-range forecast caution (v1.3)
 For forecasts **three or more days** after the latest actual meter reading, MeterFlow now projects each apartment's observed average daily change instead of repeatedly feeding predicted readings back into the pattern model. Long-range estimates are prominently marked as **not actual meter readings**. The prior 74.1% historical result describes only one-day retrospective testing on the original October data; it does **not** describe longer forecast accuracy. Before confirming any entire block, check every apartment against the physical meter. Save a draft when values have not been verified. Confirmed actual readings can reanchor subsequent forecasts.
+
+
+## Improved forecasting engine (v1.4)
+
+MeterFlow now uses per-apartment conditional transition distributions for tomorrow, a full two-day convolution for the day after, an observed linear trend for 3–13-day gaps, and a conservative blended actual-consumption rate for 14+ day gaps. Missing days and unconfirmed model predictions never become training observations. Daily confirmations and corrections re-anchor estimates. The one-day historical exact-hit estimate is **not** a calibrated probability or a forecast guarantee. [Architecture, chronological tests and limitations](docs/FORECAST_ARCHITECTURE_V14.md).

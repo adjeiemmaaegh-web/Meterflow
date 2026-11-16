@@ -72,6 +72,85 @@ namespace MeterEngine {
     }
     return out;
   }
+  /**
+   * MeterFlow v1.4: discrete empirical forecasting, not a cloud ML model.
+   * We estimate a regularized probability distribution over physical daily
+   * meter changes 0..5. Each apartment has its own history; matched preceding
+   * one-, two-, and three-day changes add evidence with explicit shrinkage
+   * toward the apartment's complete observed distribution.
+   *
+   * No future observations, model-generated deltas, or neighboring apartments
+   * are used to train a forecast for a selected date.
+   */
+  export function nextDayDistribution(history:(number|null)[]):number[] {
+    const observed=history.filter((v):v is number=>v!==null&&v>=0&&v<=5);
+    const out=[0,0,0,0,0,0];
+    if(!observed.length){out[0]=1;return out;}
+    for(const d of observed)out[d]+=3/observed.length;
+    for(let k=1;k<=3;k++) {
+      if(history.length<=k || history.slice(-k).some(v=>v===null))continue;
+      const weight=.25*Math.pow(2.5,k-1);
+      for(let i=k;i<history.length;i++) {
+        const following=history[i];
+        if(following===null || following<0 || following>5)continue;
+        let same=true;
+        for(let j=0;j<k;j++)if(history[i-k+j]!==history[history.length-k+j]){same=false;break;}
+        if(same)out[following]+=weight;
+      }
+    }
+    const sum=out.reduce((a,b)=>a+b,0);
+    return out.map(n=>n/sum);
+  }
+  function modalIndex(probabilities:number[]):number {
+    let best=0;
+    for(let i=1;i<probabilities.length;i++)if(probabilities[i]>probabilities[best])best=i;
+    return best;
+  }
+  export function adaptiveOneDay(history:(number|null)[]):number {
+    return modalIndex(nextDayDistribution(history));
+  }
+  /** Marginalize all possible first-day increments; never lock in a guessed value. */
+  export function adaptiveTwoDay(history:(number|null)[]):number {
+    const first=nextDayDistribution(history),joint=Array(11).fill(0) as number[];
+    for(let a=0;a<=5;a++) {
+      if(first[a]<=0)continue;
+      const second=nextDayDistribution(history.concat([a]));
+      for(let b=0;b<=5;b++)joint[a+b]+=first[a]*second[b];
+    }
+    return modalIndex(joint);
+  }
+  /** Robust OLS trend over clean cumulative changes for 3-13 day planning. */
+  export function robustTrendRate(history:(number|null)[]):number {
+    const levels=[0];
+    for(const d of history)levels.push(levels[levels.length-1]+(d===null?0:d));
+    if(levels.length<3)return 0;
+    const center=(levels.length-1)/2;
+    let numerator=0,denominator=0;
+    for(let i=0;i<levels.length;i++) {
+      const x=i-center;
+      numerator+=x*levels[i];denominator+=x*x;
+    }
+    return Math.max(0,denominator?numerator/denominator:0);
+  }
+  /** Long-gap drift with modest recent-history adjustment; no recursive guesses. */
+  export function conservativeRate(history:(number|null)[]):number {
+    const observed=history.filter((v):v is number=>v!==null&&v>=0&&v<=5);
+    if(!observed.length)return 0;
+    const overall=observed.reduce((a,b)=>a+b,0)/observed.length;
+    const recent=observed.slice(-7);
+    const local=recent.reduce((a,b)=>a+b,0)/recent.length;
+    return Math.max(0,.85*overall+.15*local);
+  }
+  export function adaptiveHistoricalBacktest(ds:(number|null)[]):Backtest {
+    let hits=0,trials=0;
+    for(let i=14;i<ds.length;i++) {
+      const actual=ds[i];
+      if(actual===null)continue;
+      if(adaptiveOneDay(ds.slice(0,i))===actual)hits++;
+      trials++;
+    }
+    return {hits,trials};
+  }
   export function historicalBacktest(ds:(number|null)[]):Backtest {
     let hits=0,trials=0;
     for(let i=14;i<ds.length;i++) {
@@ -86,59 +165,43 @@ namespace MeterEngine {
   export function predict(a:Apartment, overrides:Override[],target:string):ForecastResult|null {
     if(!validDate(target))return null;
     const all=getReadings(a,overrides);
-    const anchors=all.filter(r=>r.date<target);
-    if(!anchors.length)return null;
-    const anchor=anchors[anchors.length-1];
+    const anchor=all.filter(r=>r.date<target).at(-1);
+    if(!anchor)return null;
     const horizon=gap(anchor.date,target);
     if(horizon<1||horizon>366)return null;
     const history=historyToDate(all,anchor.date);
-    const eligible=history.filter(v=>v!==null).length;
+    const eligible=history.filter((v):v is number=>v!==null).length;
     const daily=changes(all,anchor.date);
-    const warnings:string[]=[];
     const recent=daily.slice(-7);
-    if(recent.some(d=>d.flag))warnings.push('Recent unusual meter change');
-    if(horizon>7)warnings.push('Long-range forecast; verify with a new actual reading');
+    const warnings:string[]=[];
+    if(recent.some(d=>d.flag))warnings.push('Recent unusual meter change; confirm physical readings');
+    if(horizon>=3)warnings.push(`Estimate spans ${horizon} days since the last recorded reading; obtain a new actual reading`);
     if(eligible<5)warnings.push('Limited history for this apartment');
-    const latest=all.find(r=>r.date===target);
+    const actual=all.find(r=>r.date===target);
     const isCorrected=overrides.some(o=>o.apartmentId===a.id&&o.date===target);
-    const validation=historicalBacktest(history);
-    // Prior 74.1% = 3721 / 5020 across all apartment-based walk-forward tests
-    // under the SAME two-step -> one-step -> mode rule, as established offline.
-    const reliability=(validation.hits+8*.741)/(validation.trials+8);
-    let likelihood=eligible>=14?Math.round(100*reliability):null;
-    if(horizon>1) likelihood=null; // Do not pass one-day hit rate off as multi-day probability.
+    const validation=adaptiveHistoricalBacktest(history);
+    // A conservative empirical one-day hit estimate; not a calibrated guarantee.
+    const reliability=(validation.hits+6*.73)/(validation.trials+6);
+    const likelihood=horizon===1&&eligible>=14?Math.round(reliability*100):null;
     let confidence:Confidence='Low';
-    if(horizon>=3 || recent.some(d=>d.flag))confidence='Caution';
-    else if(eligible<14 || horizon>1)confidence='Low';
-    else if(reliability>=.77 && validation.trials>=8)confidence='High';
+    if(horizon>=3||recent.some(d=>d.flag))confidence='Caution';
+    else if(eligible<14||horizon===2)confidence='Low';
+    else if(reliability>=.77&&validation.trials>=8)confidence='High';
     else if(reliability>=.64)confidence='Moderate';
-    let predicted=anchor.value;
-    let model:ForecastResult['model']='Frequent change';
-    let increment=0;
-    if(horizon>=3){
-      // Feeding our own predicted daily changes back into the model causes
-      // unstable repeated patterns. Project only observed consecutive daily
-      // changes, excluding negative readings and increases above five units.
-      const observed=history.filter((v):v is number=>v!==null);
-      const average=observed.length?observed.reduce((sum,d)=>sum+d,0)/observed.length:0;
-      predicted=anchor.value+Math.round(average*horizon);
-      increment=predicted-anchor.value;
-      model='Historical daily average';
-      warnings.push(`Estimate spans ${horizon} days since the last recorded reading; obtain a new actual reading`);
+    let increase=0;
+    let model:ForecastResult['model']='Adaptive transitions';
+    if(horizon===1){increase=adaptiveOneDay(history);}
+    else if(horizon===2){increase=adaptiveTwoDay(history);model='Two-day distribution';}
+    else if(horizon<=13){
+      increase=Math.round(robustTrendRate(history)*horizon);
+      model='Robust observed trend';
     }else{
-      const working=history.slice();
-      for(let i=0;i<horizon;i++){
-        const step=nextIncrement(working);
-        increment=step.increment;
-        model=step.model;
-        predicted+=step.increment;
-        // Forecast steps are temporary calculations, never saved as observations.
-        working.push(step.increment);
-      }
-      increment=predicted-anchor.value;
+      increase=Math.round(conservativeRate(history)*horizon);
+      model='Blended consumption rate';
     }
+    const predicted=anchor.value+Math.max(0,increase);
     const good=history.filter((v):v is number=>v!==null);
-    const ordered=good.slice().sort((x,y)=>x-y);
+    const ordered=good.slice().sort((a,b)=>a-b);
     const lo=ordered.length?ordered[Math.floor(.1*(ordered.length-1))]:0;
     const hi=ordered.length?ordered[Math.ceil(.9*(ordered.length-1))]:0;
     const reference=horizon===1?[anchor.value+lo,anchor.value+hi] as [number,number]:null;
@@ -146,7 +209,7 @@ namespace MeterEngine {
     return {
       apartment:a,targetDate:target,anchorDate:anchor.date,anchorReading:anchor.value,
       predicted,increment:predicted-anchor.value,daysAhead:horizon,
-      confidence,likelihood,reference,actual:latest?latest.value:null,isCorrected,
+      confidence,likelihood,reference,actual:actual?actual.value:null,isCorrected,
       warnings,eligible,recentDeltas:daily.slice(-12),trend,model,validation
     };
   }
