@@ -5,7 +5,7 @@ const root=process.cwd(),out=path.join(root,'dist');
 fs.rmSync(out,{recursive:true,force:true});
 fs.mkdirSync(path.join(out,'vendor'),{recursive:true});
 const copy=(a,b)=>fs.copyFileSync(path.join(root,a),path.join(out,b));
-for(const x of ['engine.js','daily.js','storage.js','app.js'])copy(`.build/${x}`,x);
+for(const x of ['engine.js','daily.js','storage.js','export.js','app.js'])copy(`.build/${x}`,x);
 for(const x of ['style.css','index.html'])copy(`src/${x}`,x);
 copy('src/bundled-readings.js','bundled-readings.js');
 const legacy=process.argv.includes('--legacy-preview');
@@ -23,7 +23,7 @@ if(!legacy)html=html.replace(/<script src="\/vendor\/react.production.min.js" de
 fs.writeFileSync(path.join(out,'index.html'),html);
 // Historical readings are deliberately included in the public site at the owner's request.
 // Private corrections and imported files must never enter the publish artifact.
-const list=['/','/index.html','/style.css','/engine.js','/daily.js','/storage.js','/bundled-readings.js','/app.js',...(legacy?['/vendor/react.production.min.js','/vendor/react-dom.production.min.js']:['/vendor/runtime.js']),'/manifest.webmanifest','/icon-192.png','/icon-512.png'];
+const list=['/','/index.html','/style.css','/engine.js','/daily.js','/storage.js','/export.js','/bundled-readings.js','/app.js',...(legacy?['/vendor/react.production.min.js','/vendor/react-dom.production.min.js']:['/vendor/runtime.js']),'/manifest.webmanifest','/icon-192.png','/icon-512.png'];
 const names=list.filter(p=>p!=='/');
 const hash=crypto.createHash('sha256');
 for(const item of names) hash.update(fs.readFileSync(path.join(out,item.slice(1))));

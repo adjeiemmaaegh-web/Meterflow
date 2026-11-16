@@ -1,0 +1,47 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+async function run(){
+ const ctx=vm.createContext({console,Blob,TextEncoder,Date,Intl,Map,Set,Math,Number,String,Array,Error,document:{createElement(tag){assert.equal(tag,'canvas');return canvas}}});
+ const draws=[];
+ const canvas={width:0,height:0,getContext(){return {fillRect(){},fillText(...args){draws.push(args[0]);},set fillStyle(x){},set font(x){}}},toBlob(fn,type){assert.equal(type,'image/jpeg');fn(new Blob(['JPEG-FAKE-MOCK'],{type}));}};
+ for(const name of ['engine','daily','export'])vm.runInContext(fs.readFileSync(`dist/${name}.js`,'utf8'),ctx);
+ vm.runInContext(fs.readFileSync('dist/bundled-readings.js','utf8'),ctx);
+ const pack=ctx.MeterFlowBundledPack(),E=ctx.MeterFinalExport,D=ctx.MeterDaily;
+ const a=pack.apartments,block='B',date='2026-10-26';
+ const proposed=D.buildRows(a,[],date,block);
+ let draft=D.makeSession(date,block,proposed,undefined,'draft');
+ assert.throws(()=>E.confirmedRows(draft,a,[]),/only confirmed/i);
+ const confirmed=D.makeSession(date,block,proposed,draft,'confirmed');
+ assert.throws(()=>E.confirmedRows(confirmed,a,[]),/no valid saved final/i,'forecast must NEVER become an exported actual');
+ const saved=proposed.map((r,i)=>({id:`${r.apartmentId}|${date}`,apartmentId:r.apartmentId,date,value:r.value+i,note:'private',updatedAt:''}));
+ const out=E.confirmedRows(confirmed,a,saved);
+ assert.equal(out.length,49);assert.deepEqual(Object.keys(out[0]).sort(),['apartmentNumber','finalReading']);
+ assert.equal(out[0].apartmentNumber,'G01');assert.equal(out[0].finalReading,saved[0].value);
+ assert.equal(out[1].finalReading,saved[1].value);
+ const amended=out[0].finalReading+123;
+ const overrides=saved.map((x,i)=>i===0?{...x,value:amended}:x);
+ const withDraft={...confirmed,draftRows:proposed.map(x=>({...x,value:999999}))};
+ assert.equal(E.confirmedRows(withDraft,a,overrides)[0].finalReading,amended,'persisted correction wins over pending draft');
+ assert.equal(E.filename(confirmed,'pdf'),`meterflow-block-B-${date}-final-readings.pdf`);
+ assert.equal(E.filename(confirmed,'jpeg'),`meterflow-block-B-${date}-final-readings.jpg`);
+ const pdf=E.toPdf(out),text=await pdf.text();
+ assert.equal(pdf.type,'application/pdf');assert.ok(text.startsWith('%PDF-1.4'));
+ assert.ok(text.includes('(Apartment number)')&&text.includes('(Final meter reading)'));
+ assert.ok(text.includes('(G01)')&&text.includes(`(${saved[0].value})`));
+ for(const forbidden of ['Predicted','Forecast','Confidence','private','Suggested'])assert.ok(!text.includes(forbidden),forbidden+' leaked into PDF');
+ assert.equal((text.match(/\/Type \/Page /g)||[]).length,2,'49 rows paginate to 2 A4 PDF pages');
+ const jpg=await E.toJpeg(out);
+ assert.equal(jpg.type,'image/jpeg');assert.equal(canvas.width,1000);assert.ok(canvas.height<4096);
+ assert.ok(draws.includes('Apartment number')&&draws.includes('Final meter reading')&&draws.includes('G01'));
+ assert.ok(draws.includes(String(saved[0].value)));assert.ok(!draws.includes('Forecast'));
+ assert.throws(()=>E.confirmedRows({...confirmed,status:'draft'},a,saved),/only confirmed/i);
+ const partial=saved.slice(1);
+ assert.throws(()=>E.confirmedRows(confirmed,a,partial),/no valid saved final/i);
+ // Baseline meter readings count as an actual, and are picked only on that matching date.
+ const baselineDate='2026-10-25';
+ const historicSession={...confirmed,date:baselineDate,id:`${baselineDate}|B`,rows:proposed.map(x=>({...x}))};
+ const baseline=E.confirmedRows(historicSession,a,[]);
+ assert.equal(baseline.length,49);
+ console.log('✓ JPEG/PDF only include confirmed saved actuals; corrections override drafts/forecasts.');
+ console.log('✓ 49-apartment A4 PDF paginates; JPEG two columns and phone-safe canvas.');
+}
+run().catch(e=>{console.error(e);process.exitCode=1});

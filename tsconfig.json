@@ -11,5 +11,5 @@
     "noEmitOnError": true,
     "forceConsistentCasingInFileNames": true
   },
-  "files": ["src/types.ts", "src/engine.ts", "src/daily.ts", "src/storage.ts", "src/app.tsx"]
+  "files": ["src/types.ts", "src/engine.ts", "src/daily.ts", "src/storage.ts", "src/export.ts", "src/app.tsx"]
 }

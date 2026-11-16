@@ -48,7 +48,7 @@ function MiniLine(props:{values:number[];forecast?:number;width?:number;height?:
 }
 function EmptyState(props:{icon:string;title:string;text:string;children?:any}):any {return <div className="empty-state"><div className="empty-state-icon"><Icon name={props.icon} size={26}/></div><h3>{props.title}</h3><p>{props.text}</p>{props.children}</div>;}
 class MeterFlowApp extends React.Component {
- state:MeterFlowState={ready:false,loading:true,error:'',toast:'',apartments:[],overrides:[],activities:[],files:[],meta:null,tab:'home',date:'2026-10-26',block:'All',search:'',selected:null,quickApartment:'',editDate:'2026-10-26',editValue:'',editNote:'',showEditor:false,showImport:false,showDatePicker:false,sort:'number',showAll:false,pendingImport:false,sessions:[],dailyFloor:0,dailyReview:false,dailyEdits:{},dailyBusy:false};
+ state:MeterFlowState={ready:false,loading:true,error:'',toast:'',apartments:[],overrides:[],activities:[],files:[],meta:null,tab:'home',date:'2026-10-26',block:'All',search:'',selected:null,quickApartment:'',editDate:'2026-10-26',editValue:'',editNote:'',showEditor:false,showImport:false,showDatePicker:false,sort:'number',showAll:false,pendingImport:false,sessions:[],dailyFloor:0,dailyReview:false,dailyEdits:{},dailyBusy:false,exportingSessionId:null};
  private toastTimer:any=null;
  private installEvent:any=null;
  private predictionsCache:{apartments:Apartment[];overrides:Override[];date:string;value:ForecastResult[]}|null=null;
@@ -223,6 +223,29 @@ class MeterFlowApp extends React.Component {
      await this.refresh();this.setState({dailyEdits:{},dailyReview:false,dailyBusy:false});this.notify(`Block ${block}: ${rows.length} readings confirmed and saved`);
    }catch(e){this.setState({dailyBusy:false});this.fail(e);}
  }
+ private exportSaved=async(session:BlockSession,format:'pdf'|'jpeg'):Promise<void>=>{
+   if(this.state.exportingSessionId||this.state.dailyBusy)return;
+   this.setState({exportingSessionId:session.id,error:''});
+   try{
+     // Fresh IndexedDB snapshot: newer manually saved actual readings take precedence.
+     // Never read pending draft edits or the forecast engine for a download.
+     const snapshot=await MeterStorage.snapshot();
+     const persisted=snapshot.sessions.find(s=>s.id===session.id);
+     if(!persisted||persisted.status!=='confirmed')throw Error('This block has not been confirmed and saved.');
+     const rows=MeterFinalExport.confirmedRows(persisted,snapshot.apartments,snapshot.overrides);
+     const blob=format==='pdf'?MeterFinalExport.toPdf(rows):await MeterFinalExport.toJpeg(rows);
+     MeterStorage.download(blob,MeterFinalExport.filename(persisted,format));
+     this.notify(`Downloaded ${rows.length} saved final readings as ${format.toUpperCase()}`);
+   }catch(e){this.fail(e);}finally{this.setState({exportingSessionId:null});}
+ }
+ private exportButtons(session:BlockSession):any {
+   if(session.status!=='confirmed')return null;
+   const busy=!!this.state.exportingSessionId||this.state.dailyBusy;
+   return <div className="final-export-actions" role="group" aria-label={`Download final readings for Block ${session.block} on ${session.date}`}>
+     <button type="button" className="final-export-button" disabled={busy} onClick={()=>this.exportSaved(session,'jpeg')}><Icon name="download" size={16}/> Download JPEG</button>
+     <button type="button" className="final-export-button" disabled={busy} onClick={()=>this.exportSaved(session,'pdf')}><Icon name="download" size={16}/> Download PDF</button>
+   </div>;
+ }
  private openSaved(s:BlockSession):void {
    if(!this.allowLeaveDraft())return;
    this.setState({date:s.date,block:s.block,dailyFloor:0,dailyEdits:{},dailyReview:true,tab:'home',selected:null,error:''});window.scrollTo(0,0);
@@ -281,6 +304,7 @@ class MeterFlowApp extends React.Component {
      <div className="daily-heading"><span className="section-overline">DAILY READING WORKSPACE</span><h1>Today's readings<span className="heading-dot">.</span></h1><p>Choose the date and block, check each floor, then confirm the entire block once.</p></div>
      <div className="daily-selectors"><label className="quick-label">Reading date<input type="date" aria-label="Reading date" min="2026-09-27" max="2100-12-31" value={this.state.date} onChange={(e:any)=>this.chooseDailyScope({date:e.target.value})}/></label><label className="quick-label">Select block<select aria-label="Daily block" value={block} onChange={(e:any)=>this.chooseDailyScope({block:e.target.value})}>{(['A','B','C','D','E','F','G'] as BlockName[]).map(b=><option key={b} value={b}>Block {b}</option>)}</select></label></div>
      <section className="daily-status"><div><span className="daily-status-caption">BLOCK {block} · {compactDate(this.state.date)}</span><strong>{total} apartments</strong><small>{saved?.status==='confirmed'?(saved.draftRows?'Confirmed · draft changes pending':'Confirmed & saved'):saved?'Draft saved on device':'Not yet confirmed'}{edited?` · ${edited} edited`:''}</small></div><div className={`daily-status-symbol ${saved?.status==='confirmed'?'confirmed':''}`}><Icon name={saved?.status==='confirmed'?'shield':'building'} size={23}/></div></section>
+     {saved?.status==='confirmed'?<section className="final-export-panel"><strong>Download saved final readings</strong><p>Block {block} · {saved.date} · Confirmed values only. Unsaved edits and forecasts are excluded.</p>{this.exportButtons(saved)}</section>:null}
      {maxGap>=3?<div className="daily-forecast-warning" role="alert"><Icon name="alert" size={20}/><div><strong>{maxGap}-day forecast gap — predictions are not meter readings</strong><p>The latest known reading for some apartments is {lastKnown?MeterEngine.formatDate(lastKnown):'unavailable'}. These estimates may differ from the meters. Check actual values before confirmation; otherwise save a draft. New confirmed actuals improve the next day's forecast.</p></div></div>:null}
      {unavailable?<EmptyState icon="calendar" title="No readings for this date" text={unavailable}/>:this.state.dailyReview?<>
        <div className="daily-review-top"><button className="back-button" type="button" onClick={()=>this.setState({dailyReview:false})}><Icon name="back" size={17}/> Return to floors</button><span className="review-chip">Full block review</span></div>
@@ -304,8 +328,9 @@ class MeterFlowApp extends React.Component {
    const dates=[...new Set(sessions.map(s=>s.date))];
    return <main className="main-stack daily-records"><div className="page-title"><span className="section-overline">YOUR SAVED WORK</span><h1>Daily records<span className="heading-dot">.</span></h1><p>Reopen yesterday's block, review every apartment and make changes. Saved records stay on this phone.</p></div>
      {sessions.length? <><div className="records-summary"><Icon name="clock" size={21}/><div><strong>{sessions.filter(s=>s.status==='confirmed').length} confirmed block records</strong><small>{dates.length} recorded dates · {sessions.filter(s=>s.status==='draft'||s.draftRows?.length).length} with pending drafts</small></div></div>
-       {dates.map(date=><section className="records-day" key={date}><div className="daily-floor-title"><strong>{MeterEngine.formatDate(date,{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</strong><small>{sessions.filter(s=>s.date===date).length} blocks</small></div>{sessions.filter(s=>s.date===date).map(session=><button type="button" className="record-link" key={session.id} onClick={()=>this.openSaved(session)}><span className="record-block">{session.block}</span><span><strong>Block {session.block}</strong><small>{session.rows.length} apartments · {session.status==='confirmed'?'Confirmed':'Draft'}{session.draftRows?.length?' · pending edits':''}</small></span><Icon name="arrow" size={19}/></button>)}</section>)}
+       {dates.map(date=><section className="records-day" key={date}><div className="daily-floor-title"><strong>{MeterEngine.formatDate(date,{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</strong><small>{sessions.filter(s=>s.date===date).length} blocks</small></div>{sessions.filter(s=>s.date===date).map(session=><div className="record-entry" key={session.id}><button type="button" className="record-link" onClick={()=>this.openSaved(session)}><span className="record-block">{session.block}</span><span><strong>Block {session.block}</strong><small>{session.rows.length} apartments · {session.status==='confirmed'?'Confirmed':'Draft'}{session.draftRows?.length?' · pending edits':''}</small></span><Icon name="arrow" size={19}/></button>{this.exportButtons(session)}</div>)}</section>)}
      </>:<EmptyState icon="file" title="No saved days yet" text="Choose a date and block on the Daily tab. Save a draft or confirm the entire block to see it here."/>}
+     {this.state.error?<div className="daily-form-error" role="alert">{this.state.error}</div>:null}
      <div className="section-header"><h2>Change history</h2></div><div className="records-audit">{this.state.activities.filter(e=>['block-confirmed','block-draft'].includes(e.kind)).slice(0,10).map((event,i)=><div className="audit-line" key={event.id??i}><Icon name="clock" size={16}/><span>{event.note}<small>{new Date(event.timestamp).toLocaleString('en-GB')}</small></span></div>)}</div>
    </main>;
  }
@@ -359,7 +384,7 @@ class MeterFlowApp extends React.Component {
      <div className="vault-list">{this.state.files.length?this.state.files.map(f=><div className="vault-row" key={f.id}><span className="vault-file-icon"><Icon name="file" size={20}/></span><div className="vault-name"><strong title={f.name}>{f.name}</strong><small>{(f.size/1024).toFixed(1)} KB · {new Date(f.addedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</small></div><button type="button" aria-label={`Download ${f.name}`} onClick={()=>MeterStorage.download(f.data,f.name)}><Icon name="download" size={18}/></button><button type="button" aria-label={`Delete ${f.name}`} onClick={()=>{if(window.confirm(`Delete ${f.name} from this device?`))MeterStorage.deleteFile(f.id,f.name).then(()=>this.refresh()).catch(e=>this.fail(e));}}><Icon name="trash" size={18}/></button></div>):<div className="vault-empty"><Icon name="file" size={25}/><strong>Your vault is empty</strong><span>Add an Excel workbook, a report or any file up to 25 MB.</span></div>}</div>
      <div className="section-header"><h2>Install on your phone</h2></div><div className="install-card"><div className="install-icon"><Icon name="download" size={24}/></div><div><strong>Use MeterFlow like an app</strong><p>Install from your browser for a full-screen mobile experience. Works offline after the first online load.</p></div><button type="button" className="outline-button" onClick={this.install}>Install / instructions</button></div>
      <div className="disclaimer"><Icon name="info" size={18}/><p><strong>Important:</strong> IndexedDB is specific to this browser and phone. It is not cloud sync. The data is not app-encrypted: protect your phone. Browser data clearing or uninstalling may erase it. Export and protect a private backup regularly. On iPhone, install from Safari; on Android, use Chrome's install option. Forecasts are estimates, not meter measurements or bills.</p></div>
-     <div className="settings-footer">METERFLOW / MOBILE EDITION <span>v1.3 · Offline-first</span></div>
+     <div className="settings-footer">METERFLOW / MOBILE EDITION <span>v1.5 · Offline-first</span></div>
    </main>;
  }
  private editor():any {

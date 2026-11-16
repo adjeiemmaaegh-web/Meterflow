@@ -47,7 +47,7 @@ interface MeterFlowState {
   showEditor:boolean; showImport:boolean; showDatePicker:boolean;
   sort:'number'|'attention'; showAll:boolean;
   pendingImport: boolean;
-  dailyFloor:number; dailyReview:boolean; dailyEdits:{[id:string]:string}; dailyBusy:boolean;
+  dailyFloor:number; dailyReview:boolean; dailyEdits:{[id:string]:string}; dailyBusy:boolean; exportingSessionId:string|null;
 }
 declare const React: {
   createElement: (...args:any[])=>any;

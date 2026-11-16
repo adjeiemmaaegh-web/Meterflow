@@ -14,6 +14,7 @@ assert.ok(manifest.icons.every(i => i.src.startsWith(base)));
 assert.ok(app.includes(`serviceWorker.register('${base}sw.js')`));
 const urls = JSON.parse(/const FILES=(\[[^;]+\]);/.exec(worker)[1]);
 assert.ok(urls.every(url => url.startsWith(base)));
+assert.ok(urls.includes(`${base}export.js`));
 assert.ok(worker.includes(`caches.match('${base}index.html')`));
 assert.ok(!html.includes('src="/app.js"'));
-console.log('✓ Pages subpath, install manifest, and offline cache verified.');
+console.log('✓ Pages subpath, install manifest, export asset, and offline cache verified.');

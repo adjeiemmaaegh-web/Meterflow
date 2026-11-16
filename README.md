@@ -109,3 +109,7 @@ For forecasts **three or more days** after the latest actual meter reading, Mete
 ## Improved forecasting engine (v1.4)
 
 MeterFlow now uses per-apartment conditional transition distributions for tomorrow, a full two-day convolution for the day after, an observed linear trend for 3–13-day gaps, and a conservative blended actual-consumption rate for 14+ day gaps. Missing days and unconfirmed model predictions never become training observations. Daily confirmations and corrections re-anchor estimates. The one-day historical exact-hit estimate is **not** a calibrated probability or a forecast guarantee. [Architecture, chronological tests and limitations](docs/FORECAST_ARCHITECTURE_V14.md).
+
+## Confirmed final-reading PDF/JPEG export (v1.5)
+
+After confirming a daily block, use **Download JPEG** or **Download PDF** on the Daily screen or beside a confirmed block in Saved records. The export contains only **Apartment number** and **Final meter reading**; no forecast, draft edits, notes, or confidence data. The block and reading date appear in the filename. A fresh local database snapshot supplies the readings; saved corrections take precedence, and missing actuals cause the export to stop rather than substitute predictions. The PDF is searchable and paginated; the JPEG is generated offline on the device. Always verify meter readings before confirming. Real-device download and production deployment checks remain necessary.
